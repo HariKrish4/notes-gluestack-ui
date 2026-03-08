@@ -14,6 +14,8 @@ import { Slot, Stack, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Fab, FabIcon } from "@/components/ui/fab";
 import { MoonIcon, SunIcon, SlashIcon } from "@/components/ui/icon";
+import { Alert } from "react-native";
+import { initDb } from "@/lib/db";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -28,7 +30,6 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  const [styleLoaded, setStyleLoaded] = useState(false);
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
@@ -39,6 +40,11 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
+
+  if (!loaded && !error) {
+    return null;
+  }
+
   return <RootLayoutNav />;
 }
 
@@ -46,6 +52,18 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const systemColorScheme = useColorScheme();
   const [mode, setMode] = useState<"system" | "light" | "dark">("system");
+
+  useEffect(() => {
+    const setup = async () => {
+      try {
+        await initDb();
+      } catch {
+        Alert.alert("Database Error", "Unable to initialize notes database.");
+      }
+    };
+
+    void setup();
+  }, []);
 
   // Determine effective color scheme
   const effectiveColorScheme =

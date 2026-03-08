@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { View } from "@/components/ui/view";
 import { VStack } from "@/components/ui/vstack";
@@ -6,20 +6,71 @@ import { Box } from "@/components/ui/box";
 import { Text } from "@/components/ui/text";
 import { Button, ButtonText } from "@/components/ui/button";
 import { HStack } from "@/components/ui/hstack";
-import { TextInput } from "react-native";
+import { Alert } from "react-native";
 import { Input, InputField } from "@/components/ui/input";
+import {
+  deleteNote,
+  getNoteById,
+  type Note,
+  updateNote,
+} from "@/lib/notes-repository";
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const noteId = useMemo(() => {
+    if (typeof id === "string") {
+      return Number(id);
+    }
 
-  // Load notes from JSON
-  const notes = require("../../notes.json");
-  const note = notes.find((n: any) => n.id === id);
+    if (Array.isArray(id) && id.length > 0) {
+      return Number(id[0]);
+    }
 
+    return Number.NaN;
+  }, [id]);
+
+  const [note, setNote] = useState<Note | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTitle, setEditedTitle] = useState(note?.title || "");
-  const [editedContent, setEditedContent] = useState(note?.content || "");
+  const [editedTitle, setEditedTitle] = useState("");
+  const [editedContent, setEditedContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const loadNote = useCallback(async () => {
+    if (!Number.isFinite(noteId)) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const currentNote = await getNoteById(noteId);
+      setNote(currentNote);
+
+      if (currentNote) {
+        setEditedTitle(currentNote.title);
+        setEditedContent(currentNote.content);
+      }
+    } catch {
+      Alert.alert("Error", "Unable to load note.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [noteId]);
+
+  useEffect(() => {
+    void loadNote();
+  }, [loadNote]);
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <Text>Loading note...</Text>
+      </View>
+    );
+  }
 
   if (!note) {
     return (
@@ -29,31 +80,41 @@ export default function NoteDetailScreen() {
     );
   }
 
-  const handleSave = () => {
-    // Update the note in the JSON file (in a real app, this would be a backend call)
-    const updatedNotes = notes.map((n: any) =>
-      n.id === id
-        ? {
-            ...n,
-            title: editedTitle,
-            content: editedContent,
-            updated_at: new Date().toISOString(),
-          }
-        : n,
-    );
+  const handleSave = async () => {
+    if (!editedTitle.trim()) {
+      Alert.alert("Validation", "Please enter a note title.");
+      return;
+    }
 
-    // In a real app, you would save this to a database or backend
-    console.log("Updated notes:", updatedNotes);
-    setIsEditing(false);
+    try {
+      setIsSaving(true);
+      const updated = await updateNote(note.id, {
+        title: editedTitle.trim(),
+        content: editedContent.trim(),
+      });
+
+      if (updated) {
+        setNote(updated);
+      }
+
+      setIsEditing(false);
+    } catch {
+      Alert.alert("Error", "Unable to update note.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = () => {
-    // Delete the note from the JSON file (in a real app, this would be a backend call)
-    const updatedNotes = notes.filter((n: any) => n.id !== id);
-
-    // In a real app, you would delete this from a database or backend
-    console.log("Deleted note, remaining notes:", updatedNotes);
-    router.back();
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await deleteNote(note.id);
+      router.back();
+    } catch {
+      Alert.alert("Error", "Unable to delete note.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -63,7 +124,7 @@ export default function NoteDetailScreen() {
           <>
             <Box className="mb-4">
               <Text className="text-xs text-gray-500 mb-2">Title</Text>
-              <Input className="border border-gray-300 rounded-lg p-3 mb-4">
+              <Input className="border border-gray-300 rounded-lg">
                 <InputField
                   className="text-lg font-bold"
                   value={editedTitle}
@@ -88,15 +149,17 @@ export default function NoteDetailScreen() {
             <HStack space="md">
               <Button
                 className="flex-1 bg-blue-500"
-                onPress={handleSave}
+                onPress={() => void handleSave()}
                 size="lg"
+                isDisabled={isSaving}
               >
-                <ButtonText>Save</ButtonText>
+                <ButtonText>{isSaving ? "Saving..." : "Save"}</ButtonText>
               </Button>
               <Button
                 className="flex-1 bg-gray-400"
                 onPress={() => setIsEditing(false)}
                 size="lg"
+                isDisabled={isSaving}
               >
                 <ButtonText>Cancel</ButtonText>
               </Button>
@@ -122,10 +185,11 @@ export default function NoteDetailScreen() {
               </Button>
               <Button
                 className="flex-1 bg-red-500"
-                onPress={handleDelete}
+                onPress={() => void handleDelete()}
                 size="lg"
+                isDisabled={isDeleting}
               >
-                <ButtonText>Delete</ButtonText>
+                <ButtonText>{isDeleting ? "Deleting..." : "Delete"}</ButtonText>
               </Button>
             </HStack>
           </VStack>

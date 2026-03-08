@@ -7,36 +7,40 @@ import { Text } from "@/components/ui/text";
 import { Button, ButtonText } from "@/components/ui/button";
 import { HStack } from "@/components/ui/hstack";
 import { Input, InputField } from "@/components/ui/input";
+import { Alert } from "react-native";
+import { createNote } from "@/lib/notes-repository";
 
 export default function CreateNoteScreen() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!title.trim()) {
-      alert("Please enter a note title");
+      Alert.alert("Validation", "Please enter a note title.");
       return;
     }
 
-    // Generate new note object
-    const newNote = {
-      id: `note_${Date.now()}`,
-      title: title.trim(),
-      content: content.trim(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      setIsSaving(true);
+      await createNote({
+        title: title.trim(),
+        content: content.trim(),
+      });
 
-    // Log to console (consistent with current persistence pattern)
-    console.log("Created new note:", newNote);
-
-    // Navigate back to home
-    router.back();
+      router.back();
+    } catch {
+      Alert.alert("Error", "Unable to create note.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    router.back();
+    if (!isSaving) {
+      router.back();
+    }
   };
 
   return (
@@ -44,7 +48,7 @@ export default function CreateNoteScreen() {
       <VStack space="md">
         <Box className="mb-4">
           <Text className="text-xs text-gray-500 mb-2">Title</Text>
-          <Input className="border border-gray-300 rounded-lg p-3">
+          <Input className="border border-gray-300 rounded-lg">
             <InputField
               className="text-lg font-bold"
               value={title}
@@ -69,15 +73,17 @@ export default function CreateNoteScreen() {
         <HStack space="md">
           <Button
             className="flex-1 bg-green-500"
-            onPress={handleCreate}
+            onPress={() => void handleCreate()}
             size="lg"
+            isDisabled={isSaving}
           >
-            <ButtonText>Create</ButtonText>
+            <ButtonText>{isSaving ? "Creating..." : "Create"}</ButtonText>
           </Button>
           <Button
             className="flex-1 bg-gray-400"
             onPress={handleCancel}
             size="lg"
+            isDisabled={isSaving}
           >
             <ButtonText>Cancel</ButtonText>
           </Button>
